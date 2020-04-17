@@ -403,15 +403,17 @@ static int sx9324_reset(struct device *dev, enum sx9324_reset_source src)
 	int ret;
 
 	if (src == POWER_UP_RESET) {
-		/* maximum power-up time */
-		udelay(1000);
+		pr_debug("performed power up reset\n");
 	} else if (src == SOFTWARE_RESET) {
+		pr_debug("performed software reset\n");
 		ret = regmap_write(drv_data->regmap, SX9324_RESET, 0xde);
 		if (ret) {
 			pr_err("failed to perform a software reset, err=%d\n", ret);
 			return ret;
 		}
 	}
+	/* maximum power-up time, spec says 1ms, but not enough */
+	udelay(3000);
 
 	if (0 == gpiod_get_value(drv_data->nirq_gpio)) {
 		/* clear NIRQ status and the chip is ready for operation */
@@ -426,8 +428,8 @@ static int sx9324_reset(struct device *dev, enum sx9324_reset_source src)
 			}
 		}
 	} else {
-		pr_err("failed to initialize the chip on reset\n");
-		return -ENODEV;
+		/* NIRQ handler has cleared the status */
+		pr_debug("NIRQ has already been cleared, software reset performed?\n");
 	}
 
 	return 0;
