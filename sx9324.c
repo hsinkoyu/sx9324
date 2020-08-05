@@ -176,9 +176,6 @@ struct sx9324_data {
 	bool pullup_enabled;
 	struct regulator *vdd;
 	bool vdd_enabled;
-	/* phase data container */
-	struct sx9324_phase_data phdata[SX9324_PHASES];
-
 };
 
 enum sx9324_reset_source {
@@ -268,7 +265,8 @@ static int sx9324_reset_software_default(struct device *dev)
 	return error;
 }
 
-static int sx9324_read_phdata(struct device *dev)
+static int sx9324_read_phdata(struct device *dev,
+	struct sx9324_phase_data phdata[])
 {
 	struct sx9324_data *drv_data =
 		(struct sx9324_data *)i2c_get_clientdata(to_client(dev));
@@ -279,7 +277,7 @@ static int sx9324_read_phdata(struct device *dev)
 	int i;
 
 	for (i = PH0; i < SX9324_PHASES; i++)
-		drv_data->phdata[i].is_valid = false;
+		phdata[i].is_valid = false;
 
 	error = regmap_read(drv_data->regmap, SX9324_GNRL_CTRL_1, &val);
 	if (error)
@@ -302,28 +300,28 @@ static int sx9324_read_phdata(struct device *dev)
 				if (error)
 					break;
 				/* must type-cast to short to be signed */
-				drv_data->phdata[i].proxuseful = (short)((msb << 8) | lsb);
+				phdata[i].proxuseful = (short)((msb << 8) | lsb);
 
 				error = regmap_read(drv_data->regmap, SX9324_AVG_MSB, &msb);
 				error |= regmap_read(drv_data->regmap, SX9324_AVG_LSB, &lsb);
 				if (error)
 					break;
-				drv_data->phdata[i].proxavg = (short)((msb << 8) | lsb);
+				phdata[i].proxavg = (short)((msb << 8) | lsb);
 
 				error = regmap_read(drv_data->regmap, SX9324_DIFF_MSB, &msb);
 				error |= regmap_read(drv_data->regmap, SX9324_DIFF_LSB, &lsb);
 				if (error)
 					break;
-				drv_data->phdata[i].proxdiff = (short)((msb << 8) | lsb);
+				phdata[i].proxdiff = (short)((msb << 8) | lsb);
 
-				drv_data->phdata[i].stat.steady = (stat0 >> (i + 4)) & 0x01;
-				drv_data->phdata[i].stat.prox = (stat0 >> i) & 0x01;
-				drv_data->phdata[i].stat.table = (stat1 >> (i + 4)) & 0x01;
-				drv_data->phdata[i].stat.body = (stat1 >> i) & 0x01;
-				drv_data->phdata[i].stat.fail = (stat2 >> (i + 4)) & 0x01;
-				drv_data->phdata[i].stat.comp = (stat2 >> i) & 0x01;
+				phdata[i].stat.steady = (stat0 >> (i + 4)) & 0x01;
+				phdata[i].stat.prox = (stat0 >> i) & 0x01;
+				phdata[i].stat.table = (stat1 >> (i + 4)) & 0x01;
+				phdata[i].stat.body = (stat1 >> i) & 0x01;
+				phdata[i].stat.fail = (stat2 >> (i + 4)) & 0x01;
+				phdata[i].stat.comp = (stat2 >> i) & 0x01;
 
-				drv_data->phdata[i].is_valid = true;
+				phdata[i].is_valid = true;
 			}
 		}
 	}
@@ -620,22 +618,21 @@ static ssize_t sx9324_phdata_show(struct device *dev,
 {
 	struct sx9324_data *drv_data =
 		(struct sx9324_data *)i2c_get_clientdata(to_client(dev));
-	struct sx9324_phase_data *phdata;
+	struct sx9324_phase_data phdata[SX9324_PHASES];
 	int written = 0;
 	int i;
 	int error;
 
 	written += sprintf(buf + written, "PH Useful Avg Diff Steady Prox Table Body Fail Comp\n");
 	written += sprintf(buf + written, "===================================================\n");
-	error = sx9324_read_phdata(dev);
+	error = sx9324_read_phdata(dev, phdata);
 	if (!error) {
 		for (i = PH0; i < SX9324_PHASES; i++) {
-			phdata = &drv_data->phdata[i];
-			if (phdata->is_valid) {
+			if (phdata[i].is_valid) {
 				written += sprintf(buf + written, "%d %d %d %d %d %d %d %d %d %d\n", i,
-					phdata->proxuseful, phdata->proxavg, phdata->proxdiff,
-					phdata->stat.steady, phdata->stat.prox, phdata->stat.table,
-					phdata->stat.body, phdata->stat.fail, phdata->stat.comp);
+					phdata[i].proxuseful, phdata[i].proxavg, phdata[i].proxdiff,
+					phdata[i].stat.steady, phdata[i].stat.prox, phdata[i].stat.table,
+					phdata[i].stat.body, phdata[i].stat.fail, phdata[i].stat.comp);
 			}
 		}
 	}
